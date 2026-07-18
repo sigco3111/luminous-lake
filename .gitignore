@@ -1,0 +1,10 @@
+node_modules/
+dist/
+artifacts/
+test-results/
+.dev/
+plane.MD
+AGENTS.md
+CLAUDE.md
+*.log
+.DS_Store
