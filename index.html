@@ -49,6 +49,19 @@
       gap: 9px;
       user-select: none;
     }
+    #oss-credit {
+      position: absolute;
+      top: calc(38px + env(safe-area-inset-top));
+      left: calc(18px + env(safe-area-inset-left));
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      color: var(--text-dim);
+      text-shadow: 0 1px 10px rgba(0, 0, 0, 0.6);
+      line-height: 1.6;
+      user-select: none;
+      max-width: 60vw;
+    }
+    #oss-credit a { color: var(--text-dim); text-decoration: underline; pointer-events: auto; }
     .title-dot {
       width: 8px;
       height: 8px;
@@ -205,6 +218,15 @@
       margin-bottom: 14px;
     }
     .load-card p { color: var(--text-dim); font-size: 14px; }
+    .load-card .oss {
+      margin-top: 20px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      opacity: 0.85;
+      line-height: 1.7;
+    }
+    .load-card .oss a { color: var(--text-dim); text-decoration: underline; }
     .load-pulse {
       width: 44px;
       height: 44px;
@@ -232,6 +254,11 @@
       <div class="load-pulse"></div>
       <h1>Luminous Lake</h1>
       <p>Preparing the water…</p>
+      <div class="oss">
+        MIT License &middot; Copyright (c) 2026 Bles Software<br>
+        <a href="https://github.com/stas4000/luminous-lake" target="_blank" rel="noopener">Source on GitHub</a>
+        &middot; <a href="/LICENSE" target="_blank" rel="noopener">Full license</a>
+      </div>
     </div>
   </div>
   <script type="module" src="/src/main.js"></script>
