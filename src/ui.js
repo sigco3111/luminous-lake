@@ -21,6 +21,16 @@ export function createUI(world) {
   title.innerHTML = '<span class="title-dot"></span>Luminous Lake';
   root.appendChild(title);
 
+  // MIT notice: this build is a copy of the MIT-licensed source, so it carries
+  // the copyright line and a route to the full permission notice at /LICENSE.
+  const credit = document.createElement('div');
+  credit.id = 'oss-credit';
+  credit.innerHTML =
+    'MIT License &middot; Copyright (c) 2026 Bles Software<br>' +
+    '<a href="https://github.com/stas4000/luminous-lake" target="_blank" rel="noopener">Source</a> &middot; ' +
+    '<a href="/LICENSE" target="_blank" rel="noopener">Full license</a>';
+  root.appendChild(credit);
+
   const panel = document.createElement('div');
   panel.id = 'panel';
 
