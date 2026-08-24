@@ -52,7 +52,7 @@ async function boot() {
     rendererInfo = await createRenderer(canvas);
   } catch (err) {
     document.getElementById('loading').innerHTML =
-      '<div class="load-card"><h1>Luminous Lake</h1><p>This experience needs WebGL, which your browser blocked.</p></div>';
+      '<div class="load-card"><h1>빛나는 호수</h1><p>이 체험에는 WebGL이 필요한데 브라우저가 차단했습니다.</p></div>';
     throw err;
   }
   const { renderer, type } = rendererInfo;
