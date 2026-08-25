@@ -17,8 +17,15 @@ import { createAnimalsView } from './animalsView.js';
 import { createFishingBoat } from './boat.js';
 import { createFishingView } from './fishingView.js';
 import { CameraDirector } from './cameras.js';
+import { loadFrom, saveTo, clearStorage, emptySave, defaultStorage } from '../sim/storage.js';
 
-export function createWorld({ renderer, isMobile = false }) {
+export function createWorld({ renderer, isMobile = false, storage = null } = {}) {
+  // Persistent storage for the dex + delegate log. A null/undefined storage
+  // is treated as "no persistence" — saving becomes a no-op and we always
+  // start with an empty dex. The browser entrypoint hands in defaultStorage()
+  // which auto-falls-back to an in-memory shim in private-mode browsers.
+  const storageBackend = storage || (typeof window === 'undefined' ? null : defaultStorage());
+
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 900);
   // Azimuth chosen so the low night moon sits inside the default orbit frame.
@@ -60,6 +67,16 @@ export function createWorld({ renderer, isMobile = false }) {
   const delegateLog = new DelegateLog();
   const fishingView = createFishingView({ boat });
   scene.add(fishingView.group);
+
+  // Apply any persisted save. Stats and the delegate log are restored
+  // wholesale; the dex is merged in by setting each species entry directly.
+  const initialSave = loadFrom(storageBackend);
+  fishing.stats.catches = initialSave.stats.catches;
+  fishing.stats.escaped = initialSave.stats.escaped;
+  fishing.stats.bestScore = initialSave.stats.bestScore;
+  fishing.dex = JSON.parse(JSON.stringify(initialSave.dex));
+  fishing.setBait(initialSave.bait);
+  delegateLog.replaceFromSnapshot(initialSave.log);
 
   // Mist banks, cloud sprites, the moon's additive halo, and firefly points
   // all smear soft blobs/streaks across the cube-map reflection (worst at
@@ -163,6 +180,32 @@ export function createWorld({ renderer, isMobile = false }) {
       return delegateLog.tip(speciesId);
     },
 
+    // ---- persistence ----
+    // Persist immediately. Returns true on a successful write. Cheap enough
+    // to call from a UI button or after each catch; for batch callers we also
+    // expose last-saved metadata.
+    saveProgress() {
+      return persistNow();
+    },
+    getSaveInfo() {
+      return {
+        savedAt: api._lastSavedAt || 0,
+        catches: fishing.stats.catches,
+        knownSpecies: Object.keys(fishing.dex).length
+      };
+    },
+    // Wipe the persistent save and reset the in-memory sim state to a fresh
+    // run. The next frame's UI sees an empty dex + zero stats.
+    resetProgress() {
+      clearStorage(storageBackend);
+      fishing.stats.catches = 0;
+      fishing.stats.escaped = 0;
+      fishing.stats.bestScore = 0;
+      fishing.dex = {};
+      delegateLog.clear();
+      api._lastSavedAt = 0;
+    },
+
     getState() {
       return {
         timeOfDay: cycle.t,
@@ -225,15 +268,18 @@ export function createWorld({ renderer, isMobile = false }) {
         fishing.update(dt, fishEnv);
       }
       const fishEvents = fishing.takeEvents();
+      let dirty = false;
       for (const evt of fishEvents) {
         if (evt.type === 'splash') animals.spawnSplash(evt.x, evt.z, evt.big);
         if (evt.type === 'caught' || evt.type === 'escaped') {
           // Record into the delegate log so the dex can surface learned tips.
           delegateLog.record(delegateAgent.describeFight());
           delegateAgent.resetFightLog();
+          dirty = true;
           if (api.onFishingEvent) api.onFishingEvent(evt);
         }
       }
+      if (dirty) persistNow();
       if (!api._freezeFishing) fishingView.update(fishing.snapshot(), worldTime, state.calmness, state.wind);
 
       const mistLevel = clamp01(
@@ -276,6 +322,25 @@ export function createWorld({ renderer, isMobile = false }) {
       renderer.setSize(width, height, false);
     }
   };
+
+  // Persist the current dex + delegate log + stats to the storage backend.
+  // Cheap enough to call after every fight — the data is a couple of KB.
+  function persistNow() {
+    if (!storageBackend) return false;
+    const save = emptySave();
+    save.dex = JSON.parse(JSON.stringify(fishing.dex || {}));
+    save.log = delegateLog.snapshot();
+    save.stats = {
+      catches: fishing.stats.catches,
+      escaped: fishing.stats.escaped,
+      bestScore: fishing.stats.bestScore
+    };
+    save.bait = fishing.bait;
+    save.savedAt = Date.now();
+    const ok = saveTo(storageBackend, save);
+    if (ok) api._lastSavedAt = save.savedAt;
+    return ok;
+  }
 
   director.onUserExit(() => {
     api.setCameraMode('orbit');

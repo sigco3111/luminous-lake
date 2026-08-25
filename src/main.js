@@ -2,6 +2,7 @@
 // world, UI, main loop, and the window.__luminous debug handle.
 import * as THREE from 'three';
 import { createWorld } from './world/world.js';
+import { defaultStorage } from './sim/storage.js';
 import { createUI } from './ui.js';
 
 async function createRenderer(canvas) {
@@ -58,7 +59,7 @@ async function boot() {
   const { renderer, type } = rendererInfo;
   configureRenderer(renderer);
 
-  const world = createWorld({ renderer, isMobile });
+  const world = createWorld({ renderer, isMobile, storage: defaultStorage() });
   const ui = createUI(world);
 
   function resize() {
@@ -115,6 +116,9 @@ async function boot() {
   window.__luminous.getDelegateLog = () => world.getDelegateLog();
   window.__luminous.getDelegateTip = (id) => world.getDelegateTip(id);
   window.__luminous.delegateLog = world._delegateLog;
+  window.__luminous.saveProgress = () => world.saveProgress();
+  window.__luminous.resetProgress = () => world.resetProgress();
+  window.__luminous.getSaveInfo = () => world.getSaveInfo();
   window.__luminous.getFishingBait = () => world.getFishingSnapshot().bait;
   // Deterministic fast-forward for E2E: drives fishing.update() in-process so
   // tests don't have to wait for the headless rAF throttle to play out. If

@@ -181,7 +181,35 @@ npm run validate     # check + test:e2e (풀 파이프라인)
 | **동물 시뮬** | 순수 모듈(결정론적 RNG, delta-time) → 저폴리 절차적 메쉬 |
 | **낚시 시뮬** | `src/sim/fishing.js` — 상태머신 (idle→charging→casting→waiting→bite→reeling→result) |
 | **위임 에이전트** | `src/sim/delegate.js` — 어종 가중치 풀에서 타겟 선정 + 어종별 프로파일 적용 |
+| **저장/불러오기** | `src/sim/storage.js` — 도감·위임 로그·점수·미끼를 `localStorage`에 자동 저장 |
 | **성능** | 단계형 품질 스케일러 + FPS 미터 / WebGPU 우선, WebGL 자동 폴백 |
+
+---
+
+## 💾 저장과 불러오기
+
+도감 진행 상황은 **자동 저장**됩니다 — 매 어획 / 라인 스냅마다 `localStorage`의 `luminous-lake/save/v1` 키에 JSON 한 줄로 기록됩니다. 페이지를 새로고침하거나 브라우저를 닫았다 열어도 같은 도감과 위임 학습 로그로 바로 이어집니다.
+
+**저장 대상**
+- 도감 카운트·최장 cm (50종 × `{count, best}`)
+- 위임 학습 로그 (어종별 최대 6회 × `{bait, castPower, hookDelayMs, peakTension, success, sizeCm}`)
+- 총 어획 수, 도주 수, 최고 점수
+- 마지막으로 선택한 미끼 (지렁이/딸기/비트)
+
+**저장하지 않는 것** (의도적)
+- 시간대·날씨·슬라이더 값 → 매 세션은 매번 결정론적 새벽부터 시작
+- 카메라 모드 → 마지막 사용자 상태가 자연스러운 기본값
+- 위임 모드 ON/OFF → 명시적인 일시 토글
+
+**스키마 안전성**
+- `v: 1` 버전 필드. 다음 호환 안 되는 변경 시 `STORAGE_VERSION`을 올리고 `normalize()`에 마이그레이션 단계 추가
+- 손상된 JSON / 버전 미스매치 / 누락된 필드는 모두 **빈 도감으로 폴백** (게임 진행 손실은 안 함)
+- 알 수 없는 어종 ID는 무시 (이전에 잡았던 어종이 목록에서 사라져도 안전)
+- 시크릿/프라이빗 모드 브라우저에서는 자동으로 인메모리 폴백 (저장은 안 되지만 게임은 동작)
+
+**도감 초기화**: 도감 패널 하단 "도감 초기화" 버튼 → 확인 다이얼로그 → 저장된 도감·위임 학습 노트를 모두 삭제합니다 (되돌릴 수 없음).
+
+**디버그 시임**: `window.__luminous.saveProgress()` · `window.__luminous.resetProgress()` · `window.__luminous.getSaveInfo()` — 자동 저장은 어획마다 일어나지만 수동 트리거도 가능합니다.
 
 ---
 
@@ -242,7 +270,8 @@ luminous-lake/
 │   │   ├── weather.js      # clear↔cloudy↔rain↔storm 머신 + 번개 + 자동 드리프트
 │   │   ├── animals.js      # 사슴/여우/새/오리/물고기/반딧불이 상태머신
 │   │   ├── fishing.js      # 50종 + 캐스팅/입질/릴링 시뮬 + 미끼 + 도감 누적
-│   │   └── delegate.js     # DelegateAgent + DelegateLog (자동 어부)
+│   │   ├── delegate.js     # DelegateAgent + DelegateLog (자동 어부)
+│   │   └── storage.js      # localStorage save/load/reset + 마이그레이션
 │   └── world/              # 렌더링 (plain data → 메쉬)
 │       ├── terrain.js      # 시드형 높이맵 + 호수 분화구 + vertex color
 │       ├── water.js        # MeshPhysicalMaterial + 노멀맵 + CubeCamera
@@ -263,7 +292,8 @@ luminous-lake/
 │   ├── animals.test.js     # 시뮬 상태머신 결정론
 │   ├── fishing.test.js     # 50종 일관성 + 풀 사이클
 │   ├── delegate.test.js    # DelegateAgent 결정론 + DelegateLog
-│   └── app.e2e.js          # Playwright (18개 — 데스크탑+모바일)
+│   ├── storage.test.js     # localStorage save/load/reset + 마이그레이션
+│   └── app.e2e.js          # Playwright (22개 — 데스크탑+모바일, 저장·리셋 포함)
 └── dist/                   # 빌드 산출물 (gh-pages)
 ```
 
@@ -273,10 +303,10 @@ luminous-lake/
 
 | 단계 | 명령 | 결과 |
 | --- | --- | --- |
-| 단위 테스트 | `npm test` | **59/59** 통과 (RNG·시간·날씨·배·품질·동물·낚시·위임) |
+| 단위 테스트 | `npm test` | **72/72** 통과 (RNG·시간·날씨·배·품질·동물·낚시·위임·저장) |
 | 린트 | `npm run lint` | 통과 (no-unused-vars·no-undef·no-unused 등) |
-| 프로덕션 빌드 | `npm run build` | 통과 (~810KB gzip 214KB, three 분리) |
-| E2E | `npm run test:e2e` | **18/18** 통과 (데스크탑 9 + 모바일 9) |
+| 프로덕션 빌드 | `npm run build` | 통과 (~813KB gzip 215KB, three 분리) |
+| E2E | `npm run test:e2e` | **22/22** 통과 (데스크탑 11 + 모바일 11, 저장·리셋 포함) |
 | 풀 파이프라인 | `npm run validate` | check + test:e2e |
 
 E2E가 모바일 디바이스 에뮬레이션까지 통과하는 게 중요한데, 이건 *글래스모피즘 패널이 좁은 뷰포트에서도 깨지지 않는다* + *포인터 이벤트가 합성으로 들어와도 핸들러가 죽지 않는다* + *낚시 풀 사이클이 모바일 흐름에서도 끝까지 닫힌다*는 보장입니다.

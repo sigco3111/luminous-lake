@@ -288,4 +288,88 @@ test.describe('Luminous Lake', () => {
     expect(await page.evaluate(() => window.__luminous.world._delegateMode)).toBe(false);
     await page.evaluate(() => window.__luminous.resumeFishing());
   });
+
+  test('save: catches persist across page reloads', async ({ page }) => {
+    // Start from a clean slate so the test doesn't inherit earlier tests' state.
+    await page.goto('/');
+    await page.evaluate(() => window.localStorage.clear());
+    await waitForWorld(page);
+
+    // Catch one fish deterministically.
+    await page.evaluate(() => window.__luminous.pauseFishing());
+    await page.evaluate(() => {
+      const w = window.__luminous;
+      const env = {
+        time: 0, tod: 0.3, weatherState: 'clear', calmness: 0.6, wind: 0.3,
+        boatX: 0, boatZ: -11.5, boatHeading: 0, isWater: () => true
+      };
+      const f = w.fishing;
+      const a = w.delegateAgent;
+      for (let i = 0; i < 800 && f.phase !== 'result'; i++) {
+        a.tick(env);
+        f.update(0.05, env);
+        if (f.phase === 'bite' && f._biteWindow <= 0.15) f.press(env.time);
+      }
+      // Drain events so the catch is persisted to storage.
+      for (const ev of f.takeEvents()) {
+        if (ev.type === 'caught' || ev.type === 'escaped') {
+          w.delegateLog.record(a.describeFight());
+          a.resetFightLog();
+        }
+      }
+      w.saveProgress();
+    });
+    const before = await page.evaluate(() => ({
+      dex: Object.keys(window.__luminous.fishing.dex),
+      catches: window.__luminous.fishing.stats.catches,
+      savedAt: window.__luminous.getSaveInfo().savedAt
+    }));
+    expect(before.catches).toBe(1);
+    expect(before.dex.length).toBe(1);
+    expect(before.savedAt).toBeGreaterThan(0);
+
+    // Reload the page entirely; the world should pick the save back up.
+    await page.reload();
+    await waitForWorld(page);
+    const after = await page.evaluate(() => ({
+      dex: window.__luminous.fishing.dex,
+      catches: window.__luminous.fishing.stats.catches,
+      savedAt: window.__luminous.getSaveInfo().savedAt
+    }));
+    expect(after.catches).toBe(1);
+    expect(Object.keys(after.dex).length).toBe(1);
+    expect(Object.keys(after.dex)[0]).toBe(before.dex[0]);
+  });
+
+  test('reset: button clears the dex and storage', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => window.localStorage.clear());
+    await waitForWorld(page);
+
+    // Seed a saved entry by saving the current empty state and then making
+    // a manual save through the API.
+    await page.evaluate(() => {
+      window.__luminous.fishing.stats.catches = 5;
+      window.__luminous.fishing.dex = { trout: { count: 5, best: 30 } };
+      window.__luminous.saveProgress();
+    });
+    expect(await page.evaluate(() => window.__luminous.fishing.stats.catches)).toBe(5);
+
+    // Confirm the localStorage blob exists.
+    const blob = await page.evaluate(() =>
+      window.localStorage.getItem('luminous-lake/save/v1')
+    );
+    expect(blob).toBeTruthy();
+
+    // Open the dex and click the reset button. Playwright auto-accepts
+    // window.confirm by default; the click triggers resetProgress.
+    await page.keyboard.press('c');
+    await expect(page.locator('#dex-panel')).toHaveClass(/open/);
+    page.once('dialog', (d) => d.accept());
+    await page.locator('.dex-reset').click();
+    // The reset is synchronous from the button handler; storage is gone.
+    expect(await page.evaluate(() => window.localStorage.getItem('luminous-lake/save/v1'))).toBeNull();
+    expect(await page.evaluate(() => window.__luminous.fishing.stats.catches)).toBe(0);
+    expect(await page.evaluate(() => Object.keys(window.__luminous.fishing.dex).length)).toBe(0);
+  });
 });

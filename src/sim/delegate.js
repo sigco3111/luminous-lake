@@ -233,4 +233,19 @@ export class DelegateLog {
     for (const id of Object.keys(this.entries)) out[id] = this.entries[id].slice();
     return out;
   }
+
+  // Bulk-load from a previously snapshotted form. Used when restoring a
+  // saved game so the tip text is immediately accurate.
+  replaceFromSnapshot(snap) {
+    this.entries = {};
+    if (!snap || typeof snap !== 'object') return;
+    for (const [id, list] of Object.entries(snap)) {
+      if (!Array.isArray(list)) continue;
+      this.entries[id] = list.slice(-6).map((e) => ({ ...e }));
+    }
+  }
+
+  clear() {
+    this.entries = {};
+  }
 }

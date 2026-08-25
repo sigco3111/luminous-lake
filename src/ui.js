@@ -422,9 +422,53 @@ function buildFishingUI(world, root) {
     for (const { row } of arr) dexPanel.appendChild(row);
   }
 
+  // Footer row inside the dex: last-saved timestamp + reset button.
+  const dexFoot = document.createElement('div');
+  dexFoot.className = 'dex-foot';
+  const savedLabel = document.createElement('span');
+  savedLabel.className = 'dex-saved';
+  savedLabel.textContent = '';
+  const resetBtn = document.createElement('button');
+  resetBtn.type = 'button';
+  resetBtn.className = 'dex-reset';
+  resetBtn.textContent = '도감 초기화';
+  resetBtn.title = '저장된 도감과 위임 학습 노트를 모두 삭제합니다';
+  dexFoot.appendChild(savedLabel);
+  dexFoot.appendChild(resetBtn);
+  dexPanel.appendChild(dexFoot);
+
+  function formatSavedAgo(ts) {
+    if (!ts) return '저장된 기록 없음';
+    const diff = Math.max(0, Date.now() - ts);
+    const sec = Math.floor(diff / 1000);
+    if (sec < 60) return `${sec}초 전 저장`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}분 전 저장`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}시간 전 저장`;
+    const day = Math.floor(hr / 24);
+    return `${day}일 전 저장`;
+  }
+
+  function refreshSavedLabel() {
+    const info = world.getSaveInfo ? world.getSaveInfo() : { savedAt: 0 };
+    savedLabel.textContent = formatSavedAgo(info.savedAt);
+  }
+
+  resetBtn.addEventListener('click', () => {
+    const ok = window.confirm('도감과 위임 학습 노트를 모두 삭제하시겠습니까? 되돌릴 수 없습니다.');
+    if (!ok) return;
+    world.resetProgress();
+    refreshDex(world.getFishingSnapshot());
+    refreshSavedLabel();
+  });
+
   dexBtn.addEventListener('click', () => {
     const open = dexPanel.classList.toggle('open');
-    if (open && world.getFishingSnapshot) refreshDex(world.getFishingSnapshot());
+    if (open && world.getFishingSnapshot) {
+      refreshDex(world.getFishingSnapshot());
+      refreshSavedLabel();
+    }
   });
 
   function toggleDex() {
@@ -476,6 +520,7 @@ function buildFishingUI(world, root) {
         r.color
       );
       refreshDex(world.getFishingSnapshot());
+      refreshSavedLabel();
       dexPanel.classList.add('open');
       setTimeout(() => dexPanel.classList.remove('open'), 4200);
     } else if (evt.type === 'escaped') {
