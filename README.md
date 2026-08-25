@@ -3,7 +3,9 @@
 > **시네마틱 풍 3D 호수 + 50종 어종 도감 + 위임(자동) 낚시**
 > 브라우저에서 즉시 실행. 텍스처·모델 0바이트 — 모든 게 절차적으로 생성됩니다.
 
-라이브 데모: <https://sigco3111.github.io/luminous-lake/>
+라이브 데모: <https://sigco3111.github.io/luminous-lake/> · [![deploy](https://github.com/sigco3111/luminous-lake/actions/workflows/deploy.yml/badge.svg)](https://github.com/sigco3111/luminous-lake/actions/workflows/deploy.yml)
+
+> `master` 푸시 시 GitHub Actions가 자동으로 빌드 + 단위 테스트 + gh-pages 배포를 수행합니다. 푸시 후 약 1분 안에 라이브 데모에 반영됩니다.
 
 ---
 
@@ -204,6 +206,18 @@ npm run validate     # check + test:e2e (풀 파이프라인)
 | [ESLint](https://eslint.org) | ^9.34.0 | 린트 |
 | [@eslint/js](https://eslint.org) | ^9.34.0 | 권장 규칙 |
 | [@playwright/test](https://playwright.dev) | ^1.61.1 | E2E (Chromium 데스크탑 + 모바일) |
+| [peaceiris/actions-gh-pages](https://github.com/peaceiris/actions-gh-pages) | v4 | GitHub Pages 자동 배포 |
+
+## 🚀 배포
+
+`master`에 푸시하면 `.github/workflows/deploy.yml`이 자동으로:
+
+1. 의존성 설치 (`npm ci`)
+2. 단위 테스트 (`npm test`)
+3. 프로덕션 빌드 (`npm run build`)
+4. `dist/`를 `gh-pages` 브랜치에 강제 덮어쓰기
+
+푸시 후 약 1분 안에 <https://sigco3111.github.io/luminous-lake/>에 반영됩니다. 빌드/테스트 실패 시 배포가 차단됩니다. 수동 트리거는 GitHub Actions 탭의 **Run workflow** 버튼으로 가능합니다.
 
 ---
 
