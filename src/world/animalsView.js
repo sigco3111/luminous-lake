@@ -154,27 +154,173 @@ function buildDuck() {
 }
 
 // ------------------------------------------------------------------ fish ---
-function buildFish(gold = false) {
+// Six mesh types for the 50-species dex. Each takes a 0..7 seed that picks a
+// colour palette + scale tweak so two trout don't look identical.
+const FISH_PALETTES = [
+  // [body, accent, emissive]
+  [[0xc4dcea, 0x1c3842], [0x9fc2d6, 0x142c34]], // silver-blue
+  [[0xd9a24a, 0x4a2c08], [0xb9822f, 0x3a2206]], // gold (koi)
+  [[0x6fae6f, 0x183018], [0x4a7a4a, 0x122012]], // moss green
+  [[0xa8703f, 0x2c1410], [0x7a4828, 0x180a08]], // copper
+  [[0xe6e1cf, 0x3a3830], [0xb0aa90, 0x1c1810]], // pale (carp/tench)
+  [[0x6644aa, 0x140820], [0x3c2070, 0x08020c]], // royal purple
+  [[0x4a3c30, 0x10080a], [0x2c2018, 0x080408]], // dark catfish
+  [[0xd8c0a0, 0x382814], [0xa08864, 0x180c08]]  // sandy bream
+];
+
+function fishMat(bodyHex, emissiveHex, intensity, rough) {
+  return std(bodyHex, {
+    roughness: rough,
+    metalness: 0.05,
+    emissive: emissiveHex,
+    emissiveIntensity: intensity
+  });
+}
+
+function fishAccent(accentHex, emissiveHex, intensity) {
+  return std(accentHex, {
+    roughness: 0.45,
+    emissive: emissiveHex,
+    emissiveIntensity: intensity
+  });
+}
+
+function buildFish(meshType = 'trout', seed = 0) {
   const g = new THREE.Group();
-  g.scale.setScalar(2.1); // readable through the transparent surface from orbit
-  const body = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.07, 0.34, 3, 6),
-    gold
-      ? std(0xd9a24a, { roughness: 0.35, metalness: 0.05, emissive: 0x4a2c08, emissiveIntensity: 0.75 })
-      : std(0xc4dcea, { roughness: 0.32, metalness: 0.08, emissive: 0x1c3842, emissiveIntensity: 0.8 })
-  );
-  body.geometry.rotateZ(Math.PI / 2);
-  g.add(body);
-  const tail = new THREE.Mesh(
-    new THREE.ConeGeometry(0.08, 0.16, 4),
-    gold
-      ? std(0xb9822f, { roughness: 0.4, emissive: 0x3a2206, emissiveIntensity: 0.4 })
-      : std(0x9fc2d6, { roughness: 0.35, emissive: 0x142c34, emissiveIntensity: 0.4 })
-  );
-  tail.rotation.z = Math.PI / 2;
-  tail.position.set(-0.26, 0, 0);
-  g.add(tail);
-  return { group: g };
+  g.scale.setScalar(2.1);
+  const palette = FISH_PALETTES[((seed % FISH_PALETTES.length) + FISH_PALETTES.length) % FISH_PALETTES.length];
+  const bodyM = fishMat(palette[0][0], palette[0][1], 0.75, 0.35);
+  const accM = fishAccent(palette[1][0], palette[1][1], 0.4);
+
+  switch (meshType) {
+    case 'carp': {
+      // Deep-bodied, slightly compressed, with a forked tail
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), bodyM);
+      body.scale.set(1.6, 1.05, 0.85);
+      body.position.set(0, 0, 0);
+      g.add(body);
+      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.2, 4), accM);
+      tail.rotation.z = Math.PI / 2;
+      tail.position.set(-0.32, 0, 0);
+      g.add(tail);
+      // Dorsal fin (small triangle on top)
+      const dorsal = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.12, 4), accM);
+      dorsal.position.set(0.02, 0.14, 0);
+      g.add(dorsal);
+      // Two side pectoral fins
+      for (const z of [-0.08, 0.08]) {
+        const pec = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.08, 4), accM);
+        pec.rotation.x = z > 0 ? -0.5 : 0.5;
+        pec.position.set(0.08, -0.06, z);
+        g.add(pec);
+      }
+      break;
+    }
+    case 'catfish': {
+      // Wide flat head + barrel body + two whiskers
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 6), bodyM);
+      head.scale.set(1.2, 0.6, 1.0);
+      head.position.set(0.2, 0, 0);
+      g.add(head);
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.32, 4, 6), bodyM);
+      body.geometry.rotateZ(Math.PI / 2);
+      body.position.set(-0.18, -0.02, 0);
+      g.add(body);
+      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.18, 4), accM);
+      tail.rotation.z = Math.PI / 2;
+      tail.position.set(-0.46, -0.02, 0);
+      g.add(tail);
+      // Whiskers (two thin cylinders)
+      for (const z of [-0.05, 0.05]) {
+        const whisker = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.28, 4), accM);
+        whisker.position.set(0.32, -0.04, z);
+        whisker.rotation.z = -0.6;
+        whisker.rotation.x = z > 0 ? -0.1 : 0.1;
+        g.add(whisker);
+      }
+      break;
+    }
+    case 'perch': {
+      // Compressed side-to-side, with a tall spiky dorsal
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), bodyM);
+      body.scale.set(1.4, 1.0, 0.55);
+      body.position.set(0, 0, 0);
+      g.add(body);
+      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.18, 4), accM);
+      tail.rotation.z = Math.PI / 2;
+      tail.position.set(-0.28, 0, 0);
+      g.add(tail);
+      // Spiky dorsal
+      for (let i = 0; i < 4; i++) {
+        const sp = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.12, 3), accM);
+        sp.position.set(-0.04 + i * 0.06, 0.15, 0);
+        sp.rotation.z = (i - 1.5) * 0.18;
+        g.add(sp);
+      }
+      break;
+    }
+    case 'eel': {
+      // Long thin body with pointed head
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.42, 4, 6), bodyM);
+      body.geometry.rotateZ(Math.PI / 2);
+      body.position.set(0, 0, 0);
+      g.add(body);
+      const head = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.18, 5), bodyM);
+      head.rotation.z = -Math.PI / 2;
+      head.position.set(0.34, 0, 0);
+      g.add(head);
+      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.14, 4), accM);
+      tail.rotation.z = Math.PI / 2;
+      tail.position.set(-0.36, 0, 0);
+      g.add(tail);
+      // Continuous dorsal fin (thin strip along the back)
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.01), accM);
+      fin.position.set(0, 0.06, 0);
+      g.add(fin);
+      break;
+    }
+    case 'puffer': {
+      // Round ball with spines and tiny fins
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), bodyM);
+      body.scale.set(1.3, 1.0, 0.95);
+      g.add(body);
+      // Spines around the body
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        const sp = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.1, 3), accM);
+        sp.position.set(Math.cos(a) * 0.2, Math.sin(a) * 0.16, 0);
+        sp.rotation.z = Math.cos(a) - Math.PI / 2;
+        sp.rotation.y = Math.sin(a);
+        g.add(sp);
+      }
+      // Side fins
+      for (const z of [-0.12, 0.12]) {
+        const pec = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.1, 4), accM);
+        pec.rotation.x = z > 0 ? Math.PI / 2 : -Math.PI / 2;
+        pec.position.set(0, -0.04, z);
+        g.add(pec);
+      }
+      // Tail
+      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.12, 4), accM);
+      tail.rotation.z = Math.PI / 2;
+      tail.position.set(-0.28, 0, 0);
+      g.add(tail);
+      break;
+    }
+    case 'trout':
+    default: {
+      // Streamlined torpedo with classic single tail (kept from v0)
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.34, 3, 6), bodyM);
+      body.geometry.rotateZ(Math.PI / 2);
+      g.add(body);
+      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.16, 4), accM);
+      tail.rotation.z = Math.PI / 2;
+      tail.position.set(-0.26, 0, 0);
+      g.add(tail);
+      break;
+    }
+  }
+  return { group: g, meshType, palette };
 }
 
 // ------------------------------------------------------------- fireflies ---
@@ -274,14 +420,16 @@ export function createAnimalsView({ heightAt, seed = 909 }) {
     ducks.push({ sim, view });
   }
 
-  // Fish + splashes
+  // Fish + splashes — ambient swimmers that show off the variety of meshes.
+  const MESH_TYPES = ['trout', 'carp', 'catfish', 'perch', 'eel', 'puffer'];
   const fish = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 12; i++) {
     const sim = new FishSim(rng);
-    const view = buildFish(i % 2 === 0); // half golden koi among the silver fish
+    const meshType = MESH_TYPES[i % MESH_TYPES.length];
+    const view = buildFish(meshType, i);
     view.group.visible = false;
     group.add(view.group);
-    fish.push({ sim, view });
+    fish.push({ sim, view, meshType });
   }
   const splashes = buildSplashPool();
   group.add(splashes.group);

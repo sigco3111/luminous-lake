@@ -367,7 +367,7 @@
       -webkit-user-select: none;
       touch-action: none;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-      transition: transform 0.1s, border-color 0.2s;
+      transition: transform 0.1s, border-color 0.2s, opacity 0.2s;
     }
     .fish-btn .fb-ico { display: block; font-size: 20px; margin-bottom: 2px; }
     .fish-btn:active { transform: scale(0.93); }
@@ -375,20 +375,59 @@
       border-color: rgba(255, 120, 90, 0.85);
       animation: fish-pulse 0.4s ease-in-out infinite alternate;
     }
+    .fish-btn.locked { opacity: 0.45; cursor: not-allowed; }
+    .fish-btn.locked:active { transform: none; }
+
+    #bait-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      align-items: center;
+    }
+    .bait-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 9px 4px 6px;
+      border-radius: 18px;
+      border: 1px solid var(--glass-border);
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      color: var(--text);
+      font: inherit;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      user-select: none;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+      transition: border-color 0.2s, transform 0.1s;
+      min-width: 78px;
+    }
+    .bait-chip .bait-ico { font-size: 14px; }
+    .bait-chip:active { transform: scale(0.95); }
+    .bait-chip.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(127, 212, 193, 0.45), 0 4px 14px rgba(0, 0, 0, 0.4);
+      background: rgba(127, 212, 193, 0.18);
+    }
 
     /* ---------- dex panel ---------- */
     #dex-panel {
       position: absolute;
       right: calc(18px + env(safe-area-inset-right));
       top: calc(96px + env(safe-area-inset-top));
-      width: min(320px, calc(100vw - 36px));
+      width: min(360px, calc(100vw - 36px));
+      max-height: calc(100vh - 200px);
+      overflow-y: auto;
       background: var(--glass);
       border: 1px solid var(--glass-border);
       border-radius: 18px;
       backdrop-filter: blur(18px) saturate(1.3);
       -webkit-backdrop-filter: blur(18px) saturate(1.3);
       box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-      padding: 14px 16px;
+      padding: 14px 14px 16px;
       pointer-events: auto;
       display: none;
       z-index: 16;
@@ -403,23 +442,53 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      position: sticky;
+      top: -14px;
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      padding-top: 4px;
+      padding-bottom: 8px;
     }
     #dex-panel h2 span { color: var(--text-dim); font-weight: 600; letter-spacing: 0.04em; text-transform: none; }
     .dex-row {
       display: grid;
-      grid-template-columns: 1fr auto auto;
-      gap: 8px;
-      align-items: baseline;
-      padding: 7px 2px;
+      grid-template-columns: 44px 1fr auto auto;
+      grid-template-rows: auto auto;
+      column-gap: 10px;
+      row-gap: 2px;
+      align-items: center;
+      padding: 8px 2px;
       border-top: 1px solid rgba(255, 255, 255, 0.07);
       font-size: 13px;
     }
     .dex-row:first-of-type { border-top: none; }
+    .dex-row .dx-photo {
+      grid-row: 1 / 3;
+      width: 38px;
+      height: 26px;
+      border-radius: 6px;
+      background: rgba(127, 212, 193, 0.07);
+      border: 1px solid rgba(127, 212, 193, 0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.45;
+      transition: opacity 0.2s;
+    }
+    .dex-row.unknown .dx-photo { opacity: 0.18; }
+    .dex-row:not(.unknown) .dx-photo { opacity: 0.95; }
     .dex-row .dx-name { font-weight: 600; }
+    .dex-row .dx-note { display: block; font-size: 10px; color: var(--text-dim); margin-top: 2px; font-weight: 400; }
+    .dex-row .dx-best { font-size: 11px; color: var(--accent); }
+    .dex-row .dx-count { font-size: 11px; color: var(--text-dim); }
+    .dex-row .dx-tip {
+      grid-column: 2 / 5;
+      font-size: 10px;
+      color: #b9e3d6;
+      letter-spacing: 0.04em;
+      margin-top: 2px;
+    }
     .dex-row.unknown .dx-name { color: var(--text-dim); font-weight: 400; }
-    .dex-row .dx-note { display: block; font-size: 11px; color: var(--text-dim); margin-top: 1px; }
-    .dex-row .dx-best { font-size: 12px; color: var(--accent); }
-    .dex-row .dx-count { font-size: 12px; color: var(--text-dim); }
 
     @media (max-width: 620px) {
       #slider-grid { grid-template-columns: 1fr; row-gap: 6px; }

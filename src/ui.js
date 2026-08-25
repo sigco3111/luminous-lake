@@ -1,7 +1,7 @@
 // 직접 만든 글래스모피즘 컨트롤 패널. 프레임워크 없음.
 // 식별자(world.setCameraMode / setter / dataset)는 절대 한글화하지 않습니다.
 import { CAMERA_MODES } from './world/cameras.js';
-import { SPECIES, RARITY } from './sim/fishing.js';
+import { SPECIES, RARITY, BAITS } from './sim/fishing.js';
 
 // 슬라이더 정의: key / setter 는 식별자(영문 유지), label 은 UI 노출 텍스트(한글화).
 const SLIDERS = [
@@ -215,6 +215,33 @@ function buildFishingUI(world, root) {
   const actions = document.createElement('div');
   actions.id = 'fishing-actions';
 
+  // Bait chips appear above the action buttons. The active chip is outlined;
+  // clicking switches bait immediately.
+  const baitRow = document.createElement('div');
+  baitRow.id = 'bait-row';
+  const baitChips = {};
+  for (const id of Object.keys(BAITS)) {
+    const b = BAITS[id];
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'bait-chip';
+    chip.dataset.bait = id;
+    chip.title = `${b.label} — ${b.note}`;
+    chip.innerHTML = `<span class="bait-ico">${b.icon}</span><span class="bait-label">${b.label}</span>`;
+    chip.addEventListener('click', () => setBait(id));
+    baitChips[id] = chip;
+    baitRow.appendChild(chip);
+  }
+  actions.appendChild(baitRow);
+
+  function setBait(id) {
+    if (!BAITS[id]) return;
+    for (const k of Object.keys(baitChips)) {
+      baitChips[k].classList.toggle('active', k === id);
+    }
+    if (world.fishingSim && world.fishingSim.setBait) world.fishingSim.setBait(id);
+  }
+
   const castBtn = document.createElement('button');
   castBtn.type = 'button';
   castBtn.className = 'fish-btn';
@@ -223,8 +250,6 @@ function buildFishingUI(world, root) {
   castBtn.title = '낚시 (스페이스)';
   const down = (e) => {
     e.preventDefault();
-    // Synthetic pointer events from test harnesses have no real pointer, so
-    // setPointerCapture would throw; just swallow that single case.
     try {
       castBtn.setPointerCapture?.(e.pointerId);
     } catch {
@@ -241,6 +266,29 @@ function buildFishingUI(world, root) {
   castBtn.addEventListener('pointerup', up);
   castBtn.addEventListener('pointercancel', up);
   actions.appendChild(castBtn);
+
+  // Delegate button — toggles the auto-angler. When on, it shows the current
+  // target species inline so the player can see what the agent is hunting.
+  const delBtn = document.createElement('button');
+  delBtn.type = 'button';
+  delBtn.className = 'fish-btn';
+  delBtn.id = 'btn-delegate';
+  delBtn.innerHTML = '<span class="fb-ico">🤖</span>위임';
+  delBtn.title = '위임 (D)';
+  actions.appendChild(delBtn);
+  let delegateOn = false;
+  function setDelegate(on) {
+    delegateOn = !!on;
+    delBtn.classList.toggle('hot', delegateOn);
+    world.setDelegateMode && world.setDelegateMode(delegateOn);
+    if (delegateOn) {
+      castBtn.classList.add('locked');
+    } else {
+      castBtn.classList.remove('locked');
+    }
+  }
+  delBtn.addEventListener('click', () => setDelegate(!delegateOn));
+  function toggleDelegate() { setDelegate(!delegateOn); }
 
   const dexBtn = document.createElement('button');
   dexBtn.type = 'button';
@@ -259,14 +307,68 @@ function buildFishingUI(world, root) {
   dexHead.appendChild(document.createTextNode('물고기 도감'));
   dexHead.appendChild(dexCountLabel);
   dexPanel.appendChild(dexHead);
+
+  // A small inline SVG silhouette per mesh type, used as a "dex photo" for
+  // the species that share that mesh. Six swatches total — see G option 1.
+  const meshSvgCache = {};
+  function meshSvg(meshType) {
+    if (meshSvgCache[meshType]) return meshSvgCache[meshType];
+    let inner = '';
+    const common = 'fill="#5a8db0" stroke="#9fb2c4" stroke-width="1"';
+    switch (meshType) {
+      case 'trout':
+        inner = `<ellipse cx="20" cy="14" rx="12" ry="4" ${common}/>
+                 <polygon points="32,14 38,11 38,17" ${common}/>`;
+        break;
+      case 'carp':
+        inner = `<ellipse cx="20" cy="14" rx="12" ry="6" ${common}/>
+                 <polygon points="32,14 38,10 38,18" ${common}/>
+                 <polygon points="20,8 22,4 18,4" ${common}/>`;
+        break;
+      case 'catfish':
+        inner = `<ellipse cx="20" cy="14" rx="11" ry="4" ${common}/>
+                 <ellipse cx="31" cy="14" rx="6" ry="4" ${common}/>
+                 <line x1="34" y1="14" x2="40" y2="18" stroke="#9fb2c4" stroke-width="0.6"/>
+                 <line x1="34" y1="14" x2="40" y2="10" stroke="#9fb2c4" stroke-width="0.6"/>`;
+        break;
+      case 'perch':
+        inner = `<ellipse cx="20" cy="14" rx="11" ry="5" ${common}/>
+                 <polygon points="32,14 38,11 38,17" ${common}/>
+                 <polygon points="14,8 17,3 20,8" ${common}/>
+                 <polygon points="20,8 23,3 26,8" ${common}/>`;
+        break;
+      case 'eel':
+        inner = `<rect x="6" y="13" width="28" height="3" rx="1.5" ${common}/>
+                 <polygon points="34,14 40,11 40,17" ${common}/>
+                 <rect x="6" y="11" width="28" height="0.5" fill="#9fb2c4"/>`;
+        break;
+      case 'puffer':
+        inner = `<circle cx="20" cy="14" r="9" ${common}/>
+                 <polygon points="12,6 14,2 16,6" ${common}/>
+                 <polygon points="20,4 22,0 24,4" ${common}/>
+                 <polygon points="28,6 30,2 32,6" ${common}/>
+                 <polygon points="12,22 14,26 16,22" ${common}/>
+                 <polygon points="20,24 22,28 24,24" ${common}/>
+                 <polygon points="28,22 30,26 32,22" ${common}/>`;
+        break;
+      default:
+        inner = `<circle cx="20" cy="14" r="8" ${common}/>`;
+    }
+    const svg = `<svg viewBox="0 0 40 28" width="38" height="26" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`;
+    meshSvgCache[meshType] = svg;
+    return svg;
+  }
+
   const dexRows = {};
   for (const sp of SPECIES) {
     const row = document.createElement('div');
     row.className = 'dex-row unknown';
     row.dataset.species = sp.id;
     row.innerHTML =
+      `<span class="dx-photo">${meshSvg(sp.meshType)}</span>` +
       `<span class="dx-name">???</span>` +
-      `<span class="dx-best"></span><span class="dx-count"></span>`;
+      `<span class="dx-best"></span><span class="dx-count"></span>` +
+      `<span class="dx-tip"></span>`;
     dexPanel.appendChild(row);
     dexRows[sp.id] = { row, sp };
   }
@@ -277,6 +379,7 @@ function buildFishingUI(world, root) {
     for (const id of Object.keys(dexRows)) {
       const { row, sp } = dexRows[id];
       const d = snap.dex[id];
+      const tip = world.getDelegateTip ? world.getDelegateTip(id) : null;
       if (d && d.count > 0) {
         known += 1;
         row.classList.remove('unknown');
@@ -284,17 +387,39 @@ function buildFishingUI(world, root) {
         row.querySelector('.dx-name').innerHTML =
           `${sp.name} <small style="color:${r.color};font-size:10px;">${r.label}</small>` +
           `<span class="dx-note">${sp.note}</span>`;
-        // keep the grid columns intact: move note under the name cell
         row.querySelector('.dx-best').textContent = `최장 ${d.best}cm`;
         row.querySelector('.dx-count').textContent = `${d.count}마리`;
+        // Tip from the delegate agent's learned log.
+        if (tip) {
+          const acc = Math.round(tip.castPower * 100);
+          const hookMs = tip.hookDelayMs ? Math.round(tip.hookDelayMs) : '–';
+          row.querySelector('.dx-tip').textContent =
+            `위임 학습: ${tip.baitLabel} · 파워 ${acc}% · 후킹 ${hookMs}ms (${tip.attempts}회 시도)`;
+        } else {
+          row.querySelector('.dx-tip').textContent = '';
+        }
       } else {
         row.classList.add('unknown');
         row.querySelector('.dx-name').textContent = '???';
         row.querySelector('.dx-best').textContent = '';
         row.querySelector('.dx-count').textContent = '';
+        row.querySelector('.dx-tip').textContent = '';
       }
     }
     dexCountLabel.textContent = `${known}/${SPECIES.length}`;
+    sortDexRows();
+  }
+
+  // Put caught species first so the dex feels rewarding to scroll.
+  function sortDexRows() {
+    const arr = Object.values(dexRows);
+    arr.sort((a, b) => {
+      const ca = a.row.classList.contains('unknown') ? 0 : 1;
+      const cb = b.row.classList.contains('unknown') ? 0 : 1;
+      if (ca !== cb) return cb - ca; // known first
+      return a.sp.name.localeCompare(b.sp.name);
+    });
+    for (const { row } of arr) dexPanel.appendChild(row);
   }
 
   dexBtn.addEventListener('click', () => {
@@ -317,17 +442,23 @@ function buildFishingUI(world, root) {
     if (e.code === 'Space' && !e.repeat) {
       e.preventDefault();
       onActionStart();
-      world.fishingPress(now());
+      if (!delegateOn) world.fishingPress(now());
     } else if (e.key === 'c' || e.key === 'C') {
       toggleDex();
+    } else if (e.key === 'd' || e.key === 'D') {
+      toggleDelegate();
     } else if (e.key === 'Escape') {
       dexPanel.classList.remove('open');
+      if (delegateOn) setDelegate(false);
+    } else if (e.key >= '1' && e.key <= '3') {
+      const id = ['worm', 'berry', 'beet'][Number(e.key) - 1];
+      setBait(id);
     }
   });
   window.addEventListener('keyup', (e) => {
     if (e.code === 'Space') {
       e.preventDefault();
-      world.fishingRelease(now());
+      if (!delegateOn) world.fishingRelease(now());
     }
   });
 
@@ -336,10 +467,12 @@ function buildFishingUI(world, root) {
     if (evt.type === 'caught') {
       const c = evt.catch;
       const r = RARITY[c.species.rarity];
+      const bait = BAITS[c.species.bait];
+      const baitUsed = c._baitUsed || bait?.label || '';
       showToast(
         `<div class="ct-rarity" style="color:${r.color}">${r.label}</div>` +
         `<div class="ct-name">${c.species.name}</div>` +
-        `<div class="ct-sub">${c.sizeCm}cm &middot; ${c.score}점</div>`,
+        `<div class="ct-sub">${c.sizeCm}cm &middot; ${c.score}점${baitUsed ? ' &middot; ' + baitUsed : ''}</div>`,
         r.color
       );
       refreshDex(world.getFishingSnapshot());
@@ -366,6 +499,9 @@ function buildFishingUI(world, root) {
     result: '잡았다! 눌러서 확인'
   };
 
+  // Initial bait chip state — reflect whatever the sim already has.
+  setBait(world.fishingSim ? world.fishingSim.bait : 'worm');
+
   let lastText = '';
   let lastPower = -1;
   let lastTension = -1;
@@ -385,12 +521,17 @@ function buildFishingUI(world, root) {
       progressBar.wrap.classList.toggle('on', reel);
       castBtn.classList.toggle('hot', snap.phase === 'bite' || snap.phase === 'result');
     }
-    const text = PHASE_TEXT[snap.phase] || '';
-    if (text !== lastText) {
-      lastText = text;
-      status.textContent = text;
-      status.classList.toggle('alert', snap.phase === 'bite');
-      status.classList.toggle('good', snap.phase === 'result');
+    // In delegate mode the text changes meaning; let the player know what's
+    // happening even if they aren't pressing anything.
+    let baseText = PHASE_TEXT[snap.phase] || '';
+    if (delegateOn) {
+      baseText = '🤖 ' + baseText.replace(/^(🎣 )?/, '');
+    }
+    if (baseText !== lastText) {
+      lastText = baseText;
+      status.textContent = baseText;
+      status.classList.toggle('alert', snap.phase === 'bite' && !delegateOn);
+      status.classList.toggle('good', snap.phase === 'result' && !delegateOn);
     }
     const pw = Math.round(snap.power * 100);
     if (pw !== lastPower) {

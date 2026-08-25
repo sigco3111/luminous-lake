@@ -7,6 +7,7 @@ import { TimeCycle, fireflyVisibility, dawnFactor, nightFactor } from '../sim/ti
 import { WeatherMachine } from '../sim/weather.js';
 import { QualityScaler, FpsMeter } from '../sim/quality.js';
 import { FishingSim } from '../sim/fishing.js';
+import { DelegateAgent, DelegateLog } from '../sim/delegate.js';
 import { createTerrain } from './terrain.js';
 import { createWater } from './water.js';
 import { createForest } from './forest.js';
@@ -55,6 +56,8 @@ export function createWorld({ renderer, isMobile = false }) {
 
   // Fishing game: pure sim + view, wired through the world update loop.
   const fishing = new FishingSim(new Rng(777));
+  const delegateAgent = new DelegateAgent(new Rng(8800), fishing, { autoCollect: true });
+  const delegateLog = new DelegateLog();
   const fishingView = createFishingView({ boat });
   scene.add(fishingView.group);
 
@@ -137,15 +140,28 @@ export function createWorld({ renderer, isMobile = false }) {
     // press/release drive every phase: charge+cast, hook on bite, reel hold,
     // collect on result. `now` is seconds for tap-vs-hold detection.
     fishingPress(now) {
+      if (api._delegateMode) return; // delegate owns inputs in this mode
       fishing.press(now);
     },
     fishingRelease(now) {
+      if (api._delegateMode) return;
       fishing.release(now);
     },
     getFishingSnapshot() {
       return fishing.snapshot();
     },
     fishingSim: fishing, // debug/e2e handle
+    _delegateAgent: delegateAgent, // debug/e2e handle
+    _delegateLog: delegateLog, // debug/e2e handle
+    setDelegateMode(on) {
+      api._delegateMode = !!on;
+    },
+    getDelegateLog() {
+      return delegateLog.snapshot();
+    },
+    getDelegateTip(speciesId) {
+      return delegateLog.tip(speciesId);
+    },
 
     getState() {
       return {
@@ -191,7 +207,7 @@ export function createWorld({ renderer, isMobile = false }) {
 
       // Fishing sim: conditions + boat pose in, plain events out.
       if (!api._freezeFishing) {
-        fishing.update(dt, {
+        const fishEnv = {
           time: worldTime,
           tod,
           weatherState: weather.state,
@@ -201,12 +217,21 @@ export function createWorld({ renderer, isMobile = false }) {
           boatZ: boat.group.position.z,
           boatHeading: boat.heading,
           isWater: (x, z) => terrain.heightAt(x, z) < -0.25
-        });
+        };
+        if (api._delegateMode) {
+          // Agent drives the inputs each frame; sim still ticks normally.
+          delegateAgent.tick(fishEnv);
+        }
+        fishing.update(dt, fishEnv);
       }
-      for (const evt of fishing.takeEvents()) {
+      const fishEvents = fishing.takeEvents();
+      for (const evt of fishEvents) {
         if (evt.type === 'splash') animals.spawnSplash(evt.x, evt.z, evt.big);
-        if ((evt.type === 'caught' || evt.type === 'escaped') && api.onFishingEvent) {
-          api.onFishingEvent(evt);
+        if (evt.type === 'caught' || evt.type === 'escaped') {
+          // Record into the delegate log so the dex can surface learned tips.
+          delegateLog.record(delegateAgent.describeFight());
+          delegateAgent.resetFightLog();
+          if (api.onFishingEvent) api.onFishingEvent(evt);
         }
       }
       if (!api._freezeFishing) fishingView.update(fishing.snapshot(), worldTime, state.calmness, state.wind);

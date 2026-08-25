@@ -100,6 +100,9 @@ async function boot() {
   Object.defineProperty(window.__luminous, 'fishing', {
     get: () => world.fishingSim
   });
+  Object.defineProperty(window.__luminous, 'delegateAgent', {
+    get: () => world._delegateAgent
+  });
   // Freeze the real-time rAF pipeline from advancing fishing during a test so
   // deterministic fast-forward calls alone own the simulation.
   window.__luminous.pauseFishing = () => {
@@ -108,6 +111,11 @@ async function boot() {
   window.__luminous.resumeFishing = () => {
     world._freezeFishing = false;
   };
+  window.__luminous.setDelegateMode = (on) => world.setDelegateMode(on);
+  window.__luminous.getDelegateLog = () => world.getDelegateLog();
+  window.__luminous.getDelegateTip = (id) => world.getDelegateTip(id);
+  window.__luminous.delegateLog = world._delegateLog;
+  window.__luminous.getFishingBait = () => world.getFishingSnapshot().bait;
   // Deterministic fast-forward for E2E: drives fishing.update() in-process so
   // tests don't have to wait for the headless rAF throttle to play out. If
   // `drain` is true, events (caught/escaped/splash) are routed through the

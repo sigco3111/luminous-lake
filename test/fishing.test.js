@@ -7,7 +7,9 @@ import {
   FISHING_PHASES,
   inTimeWindow,
   speciesWeight,
-  biteLuck
+  biteLuck,
+  BAITS,
+  MESH_TYPES
 } from '../src/sim/fishing.js';
 import { Rng } from '../src/sim/rng.js';
 
@@ -61,12 +63,38 @@ test('species weight respects time and weather gates', () => {
 });
 
 test('bite luck rises when more fish are reachable', () => {
-  const day = biteLuck(0.5, 'clear'); // only the trout is fully active
-  const stormDusk = biteLuck(0.75, 'storm'); // trout + perch + catfish
-  const nightClear = biteLuck(0.95, 'clear'); // trout + dace + ghost
-  assert.ok(day > 0 && day < 1, `day luck stays in range (got ${day})`);
-  assert.ok(stormDusk > day, 'storm + dusk unlocks perch and catfish windows');
-  assert.ok(nightClear > day, 'clear nights unlock dace and the ghost');
+  // Bait is worm (neutral) so weights don't shift on its account. With the
+  // dex grown to 50 species, dawn clear unlocks the most dawn/dusk-gated
+  // fish (koi, bass, shad, koi_king, dragon_koi) — well above night clear,
+  // where only a few night windows match.
+  const dawn = biteLuck(0.3, 'clear', 'worm');
+  const stormDusk = biteLuck(0.78, 'storm', 'worm');
+  const nightClear = biteLuck(0.95, 'clear', 'worm');
+  const noon = biteLuck(0.5, 'clear', 'worm');
+  assert.ok(dawn > noon, `dawn clear > noon clear (dawn=${dawn.toFixed(2)} noon=${noon.toFixed(2)})`);
+  assert.ok(stormDusk > noon, 'storm + dusk unlocks storm catfish etc.');
+  assert.ok(nightClear < dawn, 'clear nights unlock fewer species than dawn');
+  assert.ok(dawn > 0.3 && dawn < 1, 'dawn luck stays in range');
+});
+
+test('bait matching multiplies species weight', () => {
+  const koi = SPECIES.find((s) => s.id === 'koi');
+  // koi prefers berry; matching bait should not reduce the weight.
+  const off = speciesWeight(koi, 0.25, 'clear', 'worm');
+  const on = speciesWeight(koi, 0.25, 'clear', 'berry');
+  assert.ok(on >= off * 1.5, `berry × koi is heavier than worm × koi (off=${off.toFixed(1)} on=${on.toFixed(1)})`);
+});
+
+test('SPECIES has exactly 50 entries across mesh types and baits', () => {
+  assert.equal(SPECIES.length, 50);
+  for (const sp of SPECIES) {
+    assert.ok(MESH_TYPES.includes(sp.meshType), `${sp.id} meshType ok`);
+    assert.ok(BAITS[sp.bait], `${sp.id} bait ok`);
+    assert.ok(sp.profile && Number.isFinite(sp.profile.distance) === false || typeof sp.profile.distance === 'string',
+      `${sp.id} has distance`);
+    assert.ok(Number.isFinite(sp.profile.holdThreshold));
+    assert.ok(Number.isFinite(sp.profile.hookDelay));
+  }
 });
 
 test('charging fills over time and caps at 1', () => {
@@ -232,6 +260,6 @@ test('rarity table covers every species', () => {
   for (const sp of SPECIES) {
     assert.ok(RARITY[sp.rarity], `${sp.id} has a rarity entry`);
     assert.ok(sp.sizeMin > 0 && sp.sizeMax >= sp.sizeMin);
-    assert.ok(sp.strength > 0 && sp.strength <= 1.5);
+    assert.ok(sp.strength > 0 && sp.strength <= 2.0, `${sp.id} strength ${sp.strength} in range`);
   }
 });

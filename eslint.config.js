@@ -33,7 +33,7 @@ export default [
   {
     files: ['test/**/*.js', 'playwright.config.js'],
     languageOptions: {
-      globals: { process: 'readonly', Buffer: 'readonly', window: 'readonly', localStorage: 'readonly', document: 'readonly', navigator: 'readonly' }
+      globals: { process: 'readonly', Buffer: 'readonly', window: 'readonly', localStorage: 'readonly', document: 'readonly', navigator: 'readonly', MouseEvent: 'readonly', KeyboardEvent: 'readonly' }
     }
   }
 ];

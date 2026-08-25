@@ -215,8 +215,77 @@ test.describe('Luminous Lake', () => {
     await page.keyboard.press('c');
     await expect(page.locator('#dex-panel')).toHaveClass(/open/);
     const rows = await page.locator('.dex-row').count();
-    expect(rows).toBeGreaterThanOrEqual(5);
+    expect(rows).toEqual(50);
+    // Each row carries an inline SVG silhouette (mesh photo).
+    const svgCount = await page.locator('.dex-row svg').count();
+    expect(svgCount).toEqual(50);
     await page.keyboard.press('Escape');
     await expect(page.locator('#dex-panel')).not.toHaveClass(/open/);
+  });
+
+  test('bait chips switch the active bait and persist to the sim', async ({ page }) => {
+    await waitForWorld(page);
+    // Default bait is worm.
+    expect(await page.evaluate(() => window.__luminous.fishing.bait)).toBe('worm');
+    await page.locator('.bait-chip[data-bait="berry"]').click();
+    expect(await page.evaluate(() => window.__luminous.fishing.bait)).toBe('berry');
+    await page.locator('.bait-chip[data-bait="beet"]').click();
+    expect(await page.evaluate(() => window.__luminous.fishing.bait)).toBe('beet');
+    // Active class follows.
+    await expect(page.locator('.bait-chip.active[data-bait="beet"]')).toBeVisible();
+  });
+
+  test('delegate mode catches fish without player input', async ({ page }) => {
+    await waitForWorld(page);
+    await page.evaluate(() => window.__luminous.pauseFishing());
+    // Force the delegate button on (bypass the animated pulse by clicking
+    // via dispatchEvent, which is what real interaction also goes through).
+    await page.evaluate(() => {
+      const btn = document.getElementById('btn-delegate');
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(await page.evaluate(() => window.__luminous.world._delegateMode)).toBe(true);
+
+    // Drive the delegate via the exposed agent + sim updates. Manually drain
+    // events so the delegate log is populated (normally world.update does it).
+    const outcome = await page.evaluate(() => {
+      const w = window.__luminous;
+      const env = {
+        time: 0, tod: 0.3, weatherState: 'clear', calmness: 0.6, wind: 0.3,
+        boatX: 0, boatZ: -11.5, boatHeading: 0, isWater: () => true
+      };
+      const agent = w.delegateAgent;
+      const f = w.fishing;
+      for (let i = 0; i < 800 && f.phase !== 'result'; i++) {
+        agent.tick(env);
+        f.update(0.05, env);
+        if (f.phase === 'bite' && f._biteWindow <= 0.15) f.press(env.time);
+      }
+      // Drain events through world.onFishingEvent so the delegate log fills.
+      for (const e of f.takeEvents()) {
+        if (e.type === 'caught' || e.type === 'escaped') {
+          w.delegateLog.record(agent.describeFight());
+          agent.resetFightLog();
+          if (w.world.onFishingEvent) w.world.onFishingEvent(e);
+        }
+      }
+      return {
+        phase: f.phase,
+        catches: f.stats.catches,
+        bait: f.bait,
+        logKeys: Object.keys(w.delegateLog.snapshot()).length
+      };
+    });
+    expect(outcome.phase).toBe('result');
+    expect(outcome.catches).toBe(1);
+    expect(outcome.logKeys).toBeGreaterThanOrEqual(1);
+
+    // Turn delegate back off.
+    await page.evaluate(() => {
+      const btn = document.getElementById('btn-delegate');
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(await page.evaluate(() => window.__luminous.world._delegateMode)).toBe(false);
+    await page.evaluate(() => window.__luminous.resumeFishing());
   });
 });
