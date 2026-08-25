@@ -6,6 +6,7 @@ import { clamp01 } from '../sim/controls.js';
 import { TimeCycle, fireflyVisibility, dawnFactor, nightFactor } from '../sim/timecycle.js';
 import { WeatherMachine } from '../sim/weather.js';
 import { QualityScaler, FpsMeter } from '../sim/quality.js';
+import { FishingSim } from '../sim/fishing.js';
 import { createTerrain } from './terrain.js';
 import { createWater } from './water.js';
 import { createForest } from './forest.js';
@@ -13,6 +14,7 @@ import { createSky } from './sky.js';
 import { createRain, createMist } from './weatherView.js';
 import { createAnimalsView } from './animalsView.js';
 import { createFishingBoat } from './boat.js';
+import { createFishingView } from './fishingView.js';
 import { CameraDirector } from './cameras.js';
 
 export function createWorld({ renderer, isMobile = false }) {
@@ -50,6 +52,11 @@ export function createWorld({ renderer, isMobile = false }) {
 
   const boat = createFishingBoat();
   scene.add(boat.group);
+
+  // Fishing game: pure sim + view, wired through the world update loop.
+  const fishing = new FishingSim(new Rng(777));
+  const fishingView = createFishingView({ boat });
+  scene.add(fishingView.group);
 
   // Mist banks, cloud sprites, the moon's additive halo, and firefly points
   // all smear soft blobs/streaks across the cube-map reflection (worst at
@@ -126,6 +133,20 @@ export function createWorld({ renderer, isMobile = false }) {
       director.setMode(mode);
     },
 
+    // ---- fishing game ----
+    // press/release drive every phase: charge+cast, hook on bite, reel hold,
+    // collect on result. `now` is seconds for tap-vs-hold detection.
+    fishingPress(now) {
+      fishing.press(now);
+    },
+    fishingRelease(now) {
+      fishing.release(now);
+    },
+    getFishingSnapshot() {
+      return fishing.snapshot();
+    },
+    fishingSim: fishing, // debug/e2e handle
+
     getState() {
       return {
         timeOfDay: cycle.t,
@@ -141,6 +162,7 @@ export function createWorld({ renderer, isMobile = false }) {
         rainCount: rain.activeCount,
         treeCount: forest.count,
         boat: { x: boat.group.position.x, z: boat.group.position.z },
+        fishing: { phase: fishing.phase, catches: fishing.stats.catches },
         pixelRatio
       };
     },
@@ -166,6 +188,28 @@ export function createWorld({ renderer, isMobile = false }) {
       forest.update(worldTime);
 
       boat.update(dt, worldTime, state.calmness, state.wind);
+
+      // Fishing sim: conditions + boat pose in, plain events out.
+      if (!api._freezeFishing) {
+        fishing.update(dt, {
+          time: worldTime,
+          tod,
+          weatherState: weather.state,
+          calmness: state.calmness,
+          wind: state.wind,
+          boatX: boat.group.position.x,
+          boatZ: boat.group.position.z,
+          boatHeading: boat.heading,
+          isWater: (x, z) => terrain.heightAt(x, z) < -0.25
+        });
+      }
+      for (const evt of fishing.takeEvents()) {
+        if (evt.type === 'splash') animals.spawnSplash(evt.x, evt.z, evt.big);
+        if ((evt.type === 'caught' || evt.type === 'escaped') && api.onFishingEvent) {
+          api.onFishingEvent(evt);
+        }
+      }
+      if (!api._freezeFishing) fishingView.update(fishing.snapshot(), worldTime, state.calmness, state.wind);
 
       const mistLevel = clamp01(
         state.mist * (0.45 + dawnFactor(tod) * 0.9) * (1 - nightFactor(tod) * 0.7) +

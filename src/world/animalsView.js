@@ -212,7 +212,7 @@ function buildSplashPool() {
     ring.renderOrder = 3; // above the transparent water surface
     ring.visible = false;
     group.add(ring);
-    pool.push({ ring, t: 1 });
+    pool.push({ ring, t: 1, base: 1 });
   }
   return { group, pool };
 }
@@ -390,7 +390,7 @@ export function createAnimalsView({ heightAt, seed = 909 }) {
         const ripple = fishRipples[i];
         if (i < fishActive) {
           f.sim.update(dt);
-          if (f.sim.splash) api._spawnSplash(f.sim.splash.x, f.sim.splash.z);
+          if (f.sim.splash) api.spawnSplash(f.sim.splash.x, f.sim.splash.z);
           f.view.group.position.set(f.sim.x, f.sim.y, f.sim.z);
           f.view.group.rotation.y = -f.sim.heading;
           f.view.group.rotation.z = f.sim.state === 'jump' ? Math.cos(f.sim.jumpT * Math.PI) * 0.9 : 0;
@@ -411,7 +411,7 @@ export function createAnimalsView({ heightAt, seed = 909 }) {
         if (s.t >= 1) continue;
         s.t = Math.min(1, s.t + dt / 0.9);
         const k = s.t;
-        s.ring.scale.setScalar(1 + k * 4.5);
+        s.ring.scale.setScalar(s.base * (1 + k * 4.5));
         s.ring.material.opacity = 0.65 * (1 - k);
         s.ring.visible = k < 1;
       }
@@ -438,11 +438,13 @@ export function createAnimalsView({ heightAt, seed = 909 }) {
       }
     },
 
-    _spawnSplash(x, z) {
+    spawnSplash(x, z, big = false) {
       const s = splashes.pool.find((p) => p.t >= 1);
       if (!s) return;
       s.t = 0;
+      s.base = big ? 1.8 : 1;
       s.ring.position.set(x, 0.06, z);
+      s.ring.scale.setScalar(s.base);
       s.ring.visible = true;
     }
   };

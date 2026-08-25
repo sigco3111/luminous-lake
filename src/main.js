@@ -97,6 +97,44 @@ async function boot() {
     setCameraMode: (m) => { ui.setCameraMode(m); },
     getState: () => ({ ...world.getState(), rendererType: type })
   };
+  Object.defineProperty(window.__luminous, 'fishing', {
+    get: () => world.fishingSim
+  });
+  // Freeze the real-time rAF pipeline from advancing fishing during a test so
+  // deterministic fast-forward calls alone own the simulation.
+  window.__luminous.pauseFishing = () => {
+    world._freezeFishing = true;
+  };
+  window.__luminous.resumeFishing = () => {
+    world._freezeFishing = false;
+  };
+  // Deterministic fast-forward for E2E: drives fishing.update() in-process so
+  // tests don't have to wait for the headless rAF throttle to play out. If
+  // `drain` is true, events (caught/escaped/splash) are routed through the
+  // world's normal handlers so the UI also updates.
+  window.__luminous.fishingFastForward = (frames = 1, opts = {}) => {
+    const t = world.getState();
+    const env = {
+      time: 0,
+      tod: t.timeOfDay,
+      weatherState: t.weatherState,
+      calmness: 0.6,
+      wind: 0.3,
+      boatX: world.boat.group.position.x,
+      boatZ: world.boat.group.position.z,
+      boatHeading: world.boat.heading,
+      isWater: (x, z) => world.terrain.heightAt(x, z) < -0.25
+    };
+    for (let i = 0; i < frames; i++) world.fishingSim.update(0.05, env);
+    if (opts.drain) {
+      for (const ev of world.fishingSim.takeEvents()) {
+        if (ev.type === 'splash') world.animals.spawnSplash(ev.x, ev.z, ev.big);
+        if ((ev.type === 'caught' || ev.type === 'escaped') && world.onFishingEvent) {
+          world.onFishingEvent(ev);
+        }
+      }
+    }
+  };
 }
 
 boot();

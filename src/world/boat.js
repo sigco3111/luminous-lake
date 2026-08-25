@@ -46,16 +46,20 @@ export function createFishingBoat() {
   shaft.rotation.z = 0.25;
   group.add(shaft);
 
-  // Fishing rod leaning over the bow.
+  // Fishing rod leaning over the bow. It lives in its own pivot group so the
+  // fishing view can bend it during casts and fights; the old decorative
+  // line stub is gone — the real fishing line is drawn by the fishing view.
+  const rodPivot = new THREE.Group();
+  rodPivot.position.set(1.35, 1.05, 0.18);
+  rodPivot.rotation.z = -0.95;
+  rodPivot.rotation.x = 0.15;
   const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.022, 1.8, 5), darkMat);
-  rod.position.set(1.35, 1.05, 0.18);
-  rod.rotation.z = -0.95;
-  rod.rotation.x = 0.15;
-  group.add(rod);
-  const line = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1.05, 4), wood(0xd8e4ea, { roughness: 0.4 }));
-  line.position.set(1.98, 0.5, 0.3);
-  line.rotation.z = 0.18;
-  group.add(line);
+  rod.position.y = 0.9; // pivot at the butt end
+  rodPivot.add(rod);
+  const tipAnchor = new THREE.Object3D();
+  tipAnchor.position.y = 1.8; // the rod's tip in pivot space
+  rodPivot.add(tipAnchor);
+  group.add(rodPivot);
 
   // Warm lantern so the boat reads at dusk/night.
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.75, 5), darkMat);
@@ -95,6 +99,9 @@ export function createFishingBoat() {
 
   return {
     group,
+    rodPivot,
+    rodTip: tipAnchor,
+    heading: angle + Math.PI / 2, // updated each frame; bow direction
     update(dt, time, calmness, wind) {
       angle += dt * (0.032 + wind * 0.03);
       const r = 11.5 + Math.sin(time * 0.11) * 1.6;
@@ -105,6 +112,7 @@ export function createFishingBoat() {
 
       group.position.set(x, surface * 0.85 + 0.16 + Math.sin(time * 0.8) * 0.025, z);
       group.rotation.y = -heading;
+      this.heading = heading;
 
       // Pitch/roll from the local wave slope so the hull rides swells honestly.
       const e = 1.2;

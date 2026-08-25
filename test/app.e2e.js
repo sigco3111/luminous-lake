@@ -131,4 +131,92 @@ test.describe('Luminous Lake', () => {
     await page.waitForTimeout(150);
     expect(await page.evaluate(() => window.__luminous.getState().cameraMode)).toBe('orbit');
   });
+
+  test('fishing: charge, cast, hook the bite, land a fish', async ({ page }) => {
+    await waitForWorld(page);
+
+    // Freeze the real-time rAF pipeline from touching the fishing sim so
+    // every transition is driven by the deterministic fast-forward below.
+    await page.evaluate(() => window.__luminous.pauseFishing());
+
+    // The button → press() wiring is verified by direct phase checks. The
+    // longer simulated transitions are advanced deterministically via the
+    // fishingFastForward debug seam — headless rAF throttling would make the
+    // cast flight take seconds otherwise.
+    const btn = page.locator('#btn-cast');
+
+    // 1) charging: holding the button should put the sim into 'charging'.
+    await btn.dispatchEvent('pointerdown');
+    expect(await page.evaluate(() => window.__luminous.fishing.phase)).toBe('charging');
+    await page.evaluate(() => window.__luminous.fishingFastForward(8));
+    const power = await page.evaluate(() => window.__luminous.fishing.power);
+    expect(power).toBeGreaterThan(0.05);
+
+    // 2) releasing casts.
+    await btn.dispatchEvent('pointerup');
+    expect(await page.evaluate(() => window.__luminous.fishing.phase)).toBe('casting');
+    await page.evaluate(() => window.__luminous.fishingFastForward(16));
+
+    // 3) faster wait by zeroing the bite timer.
+    expect(await page.evaluate(() => window.__luminous.fishing.phase)).toBe('waiting');
+    await page.evaluate(() => { window.__luminous.fishing._biteTimer = 0.01; });
+    await page.evaluate(() => window.__luminous.fishingFastForward(1));
+    expect(await page.evaluate(() => window.__luminous.fishing.phase)).toBe('bite');
+    await expect(page.locator('#fishing-status')).toHaveClass(/alert/);
+
+    // 4) keyboard Space hooks the bite.
+    await page.keyboard.down('Space');
+    await page.evaluate(() => window.__luminous.fishingFastForward(1));
+    expect(await page.evaluate(() => window.__luminous.fishing.phase)).toBe('reeling');
+
+    // 5) play the reel minigame deterministically via direct sim.update
+    //    calls — bypasses UI hooks so it cannot race the rAF pipeline.
+    const won = await page.evaluate(() => {
+      const f = window.__luminous.fishing;
+      const env = {
+        time: 0, tod: 0.5, weatherState: 'clear',
+        calmness: 0.6, wind: 0.3,
+        boatX: 0, boatZ: -11.5, boatHeading: 0,
+        isWater: () => true
+      };
+      for (let i = 0; i < 400 && f.phase === 'reeling'; i++) {
+        f.holding = f.tension < 0.62;
+        f.update(0.05, env);
+        if (f.phase === 'reeling') {
+          for (const ev of f.takeEvents()) {
+            if (ev.type === 'caught' || ev.type === 'escaped') {
+              if (window.__luminous.world && window.__luminous.world.onFishingEvent) {
+                window.__luminous.world.onFishingEvent(ev);
+              }
+            }
+          }
+        }
+      }
+      return { phase: f.phase, catches: f.stats.catches, last: f.lastCatch };
+    });
+    expect(won.phase === 'result' || won.phase === 'idle').toBe(true);
+    expect(won.catches).toBe(1);
+    expect(won.last).not.toBeNull();
+
+    // 6) catch toast should appear in the DOM (check before releasing Space
+    // so the result phase isn't disturbed by a downstream press).
+    await expect(page.locator('#catch-toast.show')).toBeVisible();
+    await page.keyboard.up('Space');
+
+    // 7) collecting returns to idle.
+    await page.keyboard.press('Space');
+    await page.evaluate(() => window.__luminous.fishingFastForward(2));
+    expect(await page.evaluate(() => window.__luminous.fishing.phase)).toBe('idle');
+    await page.evaluate(() => window.__luminous.resumeFishing());
+  });
+
+  test('dex panel lists every species and opens via keyboard', async ({ page }) => {
+    await waitForWorld(page);
+    await page.keyboard.press('c');
+    await expect(page.locator('#dex-panel')).toHaveClass(/open/);
+    const rows = await page.locator('.dex-row').count();
+    expect(rows).toBeGreaterThanOrEqual(5);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#dex-panel')).not.toHaveClass(/open/);
+  });
 });
